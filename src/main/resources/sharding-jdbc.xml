@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:p="http://www.springframework.org/schema/p"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:sharding="http://shardingsphere.apache.org/schema/shardingsphere/sharding"
+       xmlns:mastser-slave="http://shardingsphere.apache.org/schema/shardingsphere/masterslave"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                        http://www.springframework.org/schema/beans/spring-beans.xsd
+                        http://shardingsphere.apache.org/schema/shardingsphere/sharding
+                        http://shardingsphere.apache.org/schema/shardingsphere/sharding/sharding.xsd
+                        http://www.springframework.org/schema/context
+                        http://www.springframework.org/schema/context/spring-context.xsd
+                        http://www.springframework.org/schema/tx
+                        http://www.springframework.org/schema/tx/spring-tx.xsd http://shardingsphere.apache.org/schema/shardingsphere/masterslave http://shardingsphere.apache.org/schema/shardingsphere/masterslave/master-slave.xsd">
+
+    <!--配置数据源-->
+    <bean id="ds0" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+        <property name="driverClassName" value="com.mysql.cj.jdbc.Driver"/>
+        <property name="username" value="root"/>
+        <property name="password" value="laiyefei"/>
+        <property name="jdbcUrl" value="jdbc:mysql://192.168.73.131:3306/sharding-order?serverTimezone=Asia/Shanghai&amp;useSSL=false"/>
+    </bean>
+    <bean id="slave0" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+        <property name="driverClassName" value="com.mysql.cj.jdbc.Driver"/>
+        <property name="username" value="root"/>
+        <property name="password" value="laiyefei"/>
+        <property name="jdbcUrl" value="jdbc:mysql://192.168.73.130:3306/sharding-order?serverTimezone=Asia/Shanghai&amp;useSSL=false"/>
+    </bean>
+    <bean id="ms1" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+        <property name="driverClassName" value="com.mysql.cj.jdbc.Driver"/>
+        <property name="username" value="root"/>
+        <property name="password" value="laiyefei"/>
+        <property name="jdbcUrl" value="jdbc:mysql://192.168.73.132:3306/sharding-order?serverTimezone=Asia/Shanghai&amp;useSSL=false"/>
+    </bean>
+
+    <!--主从之间负载均衡策略-->
+    <mastser-slave:load-balance-algorithm id="msStrategy" type="RANDOM"/>
+
+    <!--
+        $->{} 占位符
+        mapper.xml文件中使用 logic-table 来 编写sql语句
+    -->
+    <sharding:data-source id="sharding-data-source">
+        <sharding:sharding-rule data-source-names="ds0,slave0,ms1" default-data-source-name="ms0">
+            <!--主从配置-->
+            <sharding:master-slave-rules>
+                <sharding:master-slave-rule id="ms0" master-data-source-name="ds0" slave-data-source-names="slave0" strategy-ref="msStrategy"/>
+            </sharding:master-slave-rules>
+
+            <sharding:table-rules>
+                <sharding:table-rule logic-table="t_order" actual-data-nodes="ms$->{0..1}.t_order_$->{1..2}"
+                database-strategy-ref="databaseStrategy" table-strategy-ref="tableStrategy"
+                />
+                <sharding:table-rule logic-table="t_order_item" actual-data-nodes="ms$->{0..1}.t_order_item_$->{1..2}"
+                                     database-strategy-ref="databaseStrategy" table-strategy-ref="tableOrderItemStrategy"
+                />
+            </sharding:table-rules>
+
+            <!--配置广播表-->
+            <sharding:broadcast-table-rules>
+                <sharding:broadcast-table-rule table="area"/>
+            </sharding:broadcast-table-rules>
+            <!--绑定表，主子表 数据库中子表与主表orderId名字要对应-->
+            <!--注意：用于分片规则的user_id 子表order_item也要有!!!必须一致!!!-->
+            <sharding:binding-table-rules>
+                <sharding:binding-table-rule logic-tables="t_order,t_order_item"/>
+            </sharding:binding-table-rules>
+        </sharding:sharding-rule>
+    </sharding:data-source>
+
+    <!--分片规则 分库规则 user_id%2-->
+    <sharding:inline-strategy id="databaseStrategy" sharding-column="user_id" algorithm-expression="ms$->{user_id % 2}"/>
+    <!--分片规则 同一库分表规则 order_id%2 + 1 -->
+    <sharding:inline-strategy id="tableStrategy" sharding-column="order_id" algorithm-expression="t_order_$->{order_id % 2 + 1}"/>
+    <sharding:inline-strategy id="tableOrderItemStrategy" sharding-column="order_id" algorithm-expression="t_order_item_$->{order_id % 2 + 1}"/>
+    <bean class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="sharding-data-source"/>
+        <property name="mapperLocations" value="classpath*:/mybatis/mapper/*.xml"/>
+    </bean>
+</beans>
