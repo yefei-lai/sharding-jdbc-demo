@@ -6,6 +6,7 @@
        xmlns:tx="http://www.springframework.org/schema/tx"
        xmlns:sharding="http://shardingsphere.apache.org/schema/shardingsphere/sharding"
        xmlns:mastser-slave="http://shardingsphere.apache.org/schema/shardingsphere/masterslave"
+       xmlns:bean="http://www.springframework.org/schema/util"
        xsi:schemaLocation="http://www.springframework.org/schema/beans
                         http://www.springframework.org/schema/beans/spring-beans.xsd
                         http://shardingsphere.apache.org/schema/shardingsphere/sharding
@@ -13,7 +14,7 @@
                         http://www.springframework.org/schema/context
                         http://www.springframework.org/schema/context/spring-context.xsd
                         http://www.springframework.org/schema/tx
-                        http://www.springframework.org/schema/tx/spring-tx.xsd http://shardingsphere.apache.org/schema/shardingsphere/masterslave http://shardingsphere.apache.org/schema/shardingsphere/masterslave/master-slave.xsd">
+                        http://www.springframework.org/schema/tx/spring-tx.xsd http://shardingsphere.apache.org/schema/shardingsphere/masterslave http://shardingsphere.apache.org/schema/shardingsphere/masterslave/master-slave.xsd http://www.springframework.org/schema/util https://www.springframework.org/schema/util/spring-util.xsd">
 
     <!--配置数据源-->
     <bean id="ds0" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
@@ -51,7 +52,7 @@
 
             <sharding:table-rules>
                 <sharding:table-rule logic-table="t_order" actual-data-nodes="ms$->{0..1}.t_order_$->{1..2}"
-                database-strategy-ref="databaseStrategy" table-strategy-ref="tableStrategy"
+                database-strategy-ref="databaseStrategy" table-strategy-ref="standard" key-generator-ref="uuid"
                 />
                 <sharding:table-rule logic-table="t_order_item" actual-data-nodes="ms$->{0..1}.t_order_item_$->{1..2}"
                                      database-strategy-ref="databaseStrategy" table-strategy-ref="tableOrderItemStrategy"
@@ -69,6 +70,21 @@
             </sharding:binding-table-rules>
         </sharding:sharding-rule>
     </sharding:data-source>
+
+    <bean id="myShard" class="com.study.shardingjdbcdemo.sharding.MySharding"/>
+
+    <!--主键生成规则-->
+    <sharding:key-generator id="uuid" column="order_id" type="UUID"/>
+    <!--雪花算法生成规则配置-->
+<!--    <sharding:key-generator id="snowflake" column="order_id" type="SNOWFLAKE" props-ref="snow"/>-->
+    
+<!--    <bean:properties id="snow">-->
+<!--        <prop key="worker.id">678</prop>-->
+<!--        <prop key="max.tolerate.time.difference.milliseconds">10</prop>-->
+<!--    </bean:properties>-->
+    
+    <!--标准分片规则-->
+    <sharding:standard-strategy id="standard" sharding-column="order_id" precise-algorithm-ref="myShard"/>
 
     <!--分片规则 分库规则 user_id%2-->
     <sharding:inline-strategy id="databaseStrategy" sharding-column="user_id" algorithm-expression="ms$->{user_id % 2}"/>
